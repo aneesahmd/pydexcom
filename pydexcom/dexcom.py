@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import requests
+import json
 
 from .const import (
     DEFAULT_UUID,
@@ -26,6 +27,8 @@ from .errors import (
     DexcomError,
     SessionError,
     SessionErrorEnum,
+    ServerResponseError,
+    ServerResponseErrorEnum,
 )
 from .glucose_reading import GlucoseReading
 from .util import _LOGGER, valid_uuid
@@ -109,33 +112,36 @@ class Dexcom:
 
         :param response: `requests.Response` to parse
         """
-        if response.json():
-            _LOGGER.debug("%s", response.json())
-            code = response.json().get("Code", None)
-            message = response.json().get("Message", None)
-            if code == "SessionIdNotFound":
-                error = SessionError(SessionErrorEnum.NOT_FOUND)
-            elif code == "SessionNotValid":
-                error = SessionError(SessionErrorEnum.INVALID)
-            elif code == "AccountPasswordInvalid":  # defunct
-                error = AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
-            elif code == "SSO_AuthenticateMaxAttemptsExceeded":
-                error = AccountError(AccountErrorEnum.MAX_ATTEMPTS)
-            elif code == "SSO_InternalError":
-                if message and (
-                    "Cannot Authenticate by AccountName" in message
-                    or "Cannot Authenticate by AccountId" in message
-                ):
+        try:
+            if response.json():
+                _LOGGER.debug("%s", response.json())
+                code = response.json().get("Code", None)
+                message = response.json().get("Message", None)
+                if code == "SessionIdNotFound":
+                    error = SessionError(SessionErrorEnum.NOT_FOUND)
+                elif code == "SessionNotValid":
+                    error = SessionError(SessionErrorEnum.INVALID)
+                elif code == "AccountPasswordInvalid":  # defunct
                     error = AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
-            elif code == "InvalidArgument":
-                if message and "accountName" in message:
-                    error = ArgumentError(ArgumentErrorEnum.USERNAME_INVALID)
-                elif message and "password" in message:
-                    error = ArgumentError(ArgumentErrorEnum.PASSWORD_INVALID)
-                elif message and "UUID" in message:
-                    error = ArgumentError(ArgumentErrorEnum.ACCOUNT_ID_INVALID)
-            elif code and message:
-                _LOGGER.debug("%s: %s", code, message)
+                elif code == "SSO_AuthenticateMaxAttemptsExceeded":
+                    error = AccountError(AccountErrorEnum.MAX_ATTEMPTS)
+                elif code == "SSO_InternalError":
+                    if message and (
+                        "Cannot Authenticate by AccountName" in message
+                        or "Cannot Authenticate by AccountId" in message
+                    ):
+                        error = AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
+                elif code == "InvalidArgument":
+                    if message and "accountName" in message:
+                        error = ArgumentError(ArgumentErrorEnum.USERNAME_INVALID)
+                    elif message and "password" in message:
+                        error = ArgumentError(ArgumentErrorEnum.PASSWORD_INVALID)
+                    elif message and "UUID" in message:
+                        error = ArgumentError(ArgumentErrorEnum.ACCOUNT_ID_INVALID)
+                elif code and message:
+                    _LOGGER.debug("%s: %s", code, message)
+        except json.JSONDecodeError:
+            error = ServerResponseError(ServerResponseErrorEnum.INVALID_JSON)
         return error
 
     def _validate_region(self, region: Region) -> None:
