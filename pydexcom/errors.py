@@ -42,6 +42,8 @@ class ServerResponseErrorEnum(DexcomErrorEnum):
     """`ServerResponseError` strings."""
 
     INVALID_JSON = "Invalid or malformed JSON in server response"
+    UNKNOWN_CODE = "Unknown error code in server response"
+    UNEXPECTED = "Unexpected server response"
 
 
 class DexcomError(Exception):
@@ -79,4 +81,4 @@ class ArgumentError(DexcomError):
 
 
 class ServerResponseError(DexcomError):
-    """Errors involving unexpected or malformed server responses (e.g., JSONDecodeError)."""
+    """Errors involving unexpected or malformed server responses."""
