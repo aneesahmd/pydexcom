@@ -24,8 +24,8 @@ from .errors import (
     ArgumentError,
     ArgumentErrorEnum,
     DexcomError,
-    ServerResponseError,
-    ServerResponseErrorEnum,
+    ServerError,
+    ServerErrorEnum,
     SessionError,
     SessionErrorEnum,
 )
@@ -101,9 +101,7 @@ class Dexcom:
             raise self._handle_error_code(response_json) from http_error
         except requests.JSONDecodeError as json_error:
             _LOGGER.exception("JSON decode error: %s", response.text)
-            raise ServerResponseError(
-                ServerResponseErrorEnum.INVALID_JSON
-            ) from json_error
+            raise ServerError(ServerErrorEnum.INVALID_JSON) from json_error
         else:
             return response_json
 
@@ -138,9 +136,9 @@ class Dexcom:
                 return ArgumentError(ArgumentErrorEnum.ACCOUNT_ID_INVALID)
         if code and message:
             _LOGGER.error("%s: %s", code, message)
-            return ServerResponseError(ServerResponseErrorEnum.UNKNOWN_CODE)
+            return ServerError(ServerErrorEnum.UNKNOWN_CODE)
         _LOGGER.error("%s", json)
-        return ServerResponseError(ServerResponseErrorEnum.UNEXPECTED)
+        return ServerError(ServerErrorEnum.UNEXPECTED)
 
     def _validate_region(self, region: Region) -> None:
         if region not in list(Region):
