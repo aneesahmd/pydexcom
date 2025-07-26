@@ -38,6 +38,14 @@ class ArgumentErrorEnum(DexcomErrorEnum):
     GLUCOSE_READING_INVALID = "JSON glucose reading incorrectly formatted"
 
 
+class ServerErrorEnum(DexcomErrorEnum):
+    """`ServerErrorEnum` strings."""
+
+    INVALID_JSON = "Invalid or malformed JSON in server response"
+    UNKNOWN_CODE = "Unknown error code in server response"
+    UNEXPECTED = "Unexpected server response"
+
+
 class DexcomError(Exception):
     """Base class for all `pydexcom` errors."""
 
@@ -70,3 +78,7 @@ class SessionError(DexcomError):
 
 class ArgumentError(DexcomError):
     """Errors involving `pydexcom` arguments."""
+
+
+class ServerError(DexcomError):
+    """Errors involving unexpected or malformed server responses."""

@@ -24,6 +24,8 @@ from .errors import (
     ArgumentError,
     ArgumentErrorEnum,
     DexcomError,
+    ServerError,
+    ServerErrorEnum,
     SessionError,
     SessionErrorEnum,
 )
@@ -93,50 +95,50 @@ class Dexcom:
         )
 
         try:
+            response_json = response.json()
             response.raise_for_status()
-            return response.json()
         except requests.HTTPError as http_error:
-            error = self._handle_response(response)
-            if error:
-                raise error from http_error
-            _LOGGER.exception("%s", response.text)
-            raise
+            raise self._handle_error_code(response_json) from http_error
+        except requests.JSONDecodeError as json_error:
+            _LOGGER.exception("JSON decode error: %s", response.text)
+            raise ServerError(ServerErrorEnum.INVALID_JSON) from json_error
+        else:
+            return response_json
 
-    def _handle_response(self, response: requests.Response) -> DexcomError | None:  # noqa: C901
-        error: DexcomError | None = None
+    def _handle_error_code(self, json: dict[str, Any]) -> DexcomError:  # noqa: C901, PLR0911
         """
-        Parse `requests.Response` for `pydexcom.errors.DexcomError`.
+        Parse `requests.Response` JSON for `pydexcom.errors.DexcomError`.
 
-        :param response: `requests.Response` to parse
+        :param response: `requests.Response` JSON to parse
         """
-        if response.json():
-            _LOGGER.debug("%s", response.json())
-            code = response.json().get("Code", None)
-            message = response.json().get("Message", None)
-            if code == "SessionIdNotFound":
-                error = SessionError(SessionErrorEnum.NOT_FOUND)
-            elif code == "SessionNotValid":
-                error = SessionError(SessionErrorEnum.INVALID)
-            elif code == "AccountPasswordInvalid":  # defunct
-                error = AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
-            elif code == "SSO_AuthenticateMaxAttemptsExceeded":
-                error = AccountError(AccountErrorEnum.MAX_ATTEMPTS)
-            elif code == "SSO_InternalError":
-                if message and (
-                    "Cannot Authenticate by AccountName" in message
-                    or "Cannot Authenticate by AccountId" in message
-                ):
-                    error = AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
-            elif code == "InvalidArgument":
-                if message and "accountName" in message:
-                    error = ArgumentError(ArgumentErrorEnum.USERNAME_INVALID)
-                elif message and "password" in message:
-                    error = ArgumentError(ArgumentErrorEnum.PASSWORD_INVALID)
-                elif message and "UUID" in message:
-                    error = ArgumentError(ArgumentErrorEnum.ACCOUNT_ID_INVALID)
-            elif code and message:
-                _LOGGER.debug("%s: %s", code, message)
-        return error
+        _LOGGER.debug("%s", json)
+        code, message = json.get("Code"), json.get("Message")
+        if code == "SessionIdNotFound":
+            return SessionError(SessionErrorEnum.NOT_FOUND)
+        if code == "SessionNotValid":
+            return SessionError(SessionErrorEnum.INVALID)
+        if code == "AccountPasswordInvalid":
+            return AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
+        if code == "SSO_AuthenticateMaxAttemptsExceeded":
+            return AccountError(AccountErrorEnum.MAX_ATTEMPTS)
+        if code == "SSO_InternalError":  # noqa: SIM102
+            if message and (
+                "Cannot Authenticate by AccountName" in message
+                or "Cannot Authenticate by AccountId" in message
+            ):
+                return AccountError(AccountErrorEnum.FAILED_AUTHENTICATION)
+        if code == "InvalidArgument":
+            if message and "accountName" in message:
+                return ArgumentError(ArgumentErrorEnum.USERNAME_INVALID)
+            if message and "password" in message:
+                return ArgumentError(ArgumentErrorEnum.PASSWORD_INVALID)
+            if message and "UUID" in message:
+                return ArgumentError(ArgumentErrorEnum.ACCOUNT_ID_INVALID)
+        if code and message:
+            _LOGGER.error("%s: %s", code, message)
+            return ServerError(ServerErrorEnum.UNKNOWN_CODE)
+        _LOGGER.error("%s", json)
+        return ServerError(ServerErrorEnum.UNEXPECTED)
 
     def _validate_region(self, region: Region) -> None:
         if region not in list(Region):
